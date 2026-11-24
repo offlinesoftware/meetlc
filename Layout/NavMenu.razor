@@ -24,16 +24,82 @@
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
             </NavLink>
         </div>
+        <div class="nav-item px-3">
+            @if (username is null)
+            {
+                <NavLink class="nav-link" href="login">
+                    Log in
+                </NavLink>
+            }
+            else
+            {
+                <span class="nav-link">Signed in as @username</span>
+                <button class="nav-link btn btn-link text-start" @onclick="LogOutAsync" @onclick:stopPropagation="true">
+                    Log out
+                </button>
+            }
+            @if (!string.IsNullOrEmpty(authError))
+            {
+                <span class="nav-link text-warning" role="status">@authError</span>
+            }
+        </div>
     </nav>
 </div>
 
 @code {
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
     private bool collapseNavMenu = true;
+    private string? username;
+    private string? authError;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var response = await Http.GetAsync("api/auth/me");
+            if (response.IsSuccessStatusCode)
+            {
+                var session = await response.Content.ReadFromJsonAsync<SessionResponse>();
+                username = session?.Username;
+            }
+            else if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized)
+            {
+                authError = "Could not check login status.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            authError = "Login service unavailable.";
+        }
+    }
+
+    private async Task LogOutAsync()
+    {
+        try
+        {
+            using var response = await Http.PostAsync("api/auth/logout", content: null);
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            authError = "Could not log out. Please try again.";
+        }
+        catch (HttpRequestException)
+        {
+            authError = "Login service unavailable.";
+        }
+    }
 
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    private sealed record SessionResponse(string Username);
 }
